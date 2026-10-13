@@ -53,6 +53,28 @@ inline float dequantize(int8_t q, const QuantParams& p) noexcept {
     return static_cast<float>(q) * p.scale;
 }
 
+/// Convert an int32 accumulator back to int8 for the next quantized layer.
+///
+/// The multiplier combines the input, weight, and output scales:
+///     real = accumulator * inputScale * weightScale
+///     outputQ = real / outputScale
+///             = accumulator * (inputScale * weightScale / outputScale)
+///
+/// Production runtimes usually approximate this multiplier with integer-only
+/// fixed-point arithmetic. Keeping it as a float here makes the equation easy
+/// to inspect while all tensor storage and dot products remain integer.
+inline int8_t requantize(int32_t accumulator, float multiplier) noexcept {
+    const float scaled = static_cast<float>(accumulator) * multiplier;
+    int32_t rounded =
+        static_cast<int32_t>(scaled >= 0.0f ? scaled + 0.5f : scaled - 0.5f);
+    if (rounded > 127) {
+        rounded = 127;
+    } else if (rounded < -127) {
+        rounded = -127;
+    }
+    return static_cast<int8_t>(rounded);
+}
+
 /// Quantize a whole matrix in place into an int8 matrix, returning its scale.
 template <std::size_t R, std::size_t C>
 QuantParams quantizeMatrix(const Matrix<float, R, C>& src,

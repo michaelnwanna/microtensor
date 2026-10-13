@@ -4,6 +4,7 @@
 
 #include <cstdio>
 
+#include "microtensor/inference.hpp"
 #include "microtensor/matrix.hpp"
 #include "microtensor/quantize.hpp"
 
@@ -71,6 +72,52 @@ void test_quantize_roundtrip() {
     }
 }
 
+void test_requantize_rounding_and_saturation() {
+    CHECK(mt::requantize(5, 0.5f) == 3);
+    CHECK(mt::requantize(-5, 0.5f) == -3);
+    CHECK(mt::requantize(1000, 1.0f) == 127);
+    CHECK(mt::requantize(-1000, 1.0f) == -127);
+    CHECK(mt::requantize(0, 42.0f) == 0);
+}
+
+void test_dense_layer_accumulates_bias_and_requantizes() {
+    mt::DenseLayer<2, 2> layer;
+    layer.weights(0, 0) = 4;
+    layer.weights(0, 1) = 1;
+    layer.weights(1, 0) = -2;
+    layer.weights(1, 1) = 3;
+    layer.bias = {1, -1};
+    layer.requantMultiplier = 0.5f;
+
+    const std::array<int8_t, 2> output = layer({2, -3});
+    CHECK(output[0] == 3);   // (4*2 + 1*-3 + 1) * 0.5 = 3
+    CHECK(output[1] == -7);  // (-2*2 + 3*-3 - 1) * 0.5 = -7
+}
+
+void test_sequential_classifier() {
+    mt::SequentialClassifier<2, 2, 2> model;
+
+    // The hidden layer is an identity transform. ReLU turns {2, -3} into
+    // {2, 0}, demonstrating an activation tensor that stays in int8 space.
+    model.hiddenLayer.weights(0, 0) = 1;
+    model.hiddenLayer.weights(1, 1) = 1;
+
+    // Class 0 reads hidden neuron 0; class 1 emphasizes hidden neuron 1.
+    model.outputLayer.weights(0, 0) = 1;
+    model.outputLayer.weights(1, 1) = 2;
+
+    const auto result = model.infer({2, -3});
+    CHECK(result.hidden[0] == 2);
+    CHECK(result.hidden[1] == 0);
+    CHECK(result.scores[0] == 2);
+    CHECK(result.scores[1] == 0);
+    CHECK(result.predictedClass == 0);
+
+    const auto repeated = model.infer({2, -3});
+    CHECK(repeated.scores == result.scores);
+    CHECK(repeated.predictedClass == result.predictedClass);
+}
+
 void test_quantized_matmul_matches_float() {
     mt::Matrix<float, 2, 3> a;
     a(0, 0) = 0.5f;
@@ -109,6 +156,9 @@ int main() {
     test_matmul_known_values();
     test_transpose();
     test_quantize_roundtrip();
+    test_requantize_rounding_and_saturation();
+    test_dense_layer_accumulates_bias_and_requantizes();
+    test_sequential_classifier();
     test_quantized_matmul_matches_float();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

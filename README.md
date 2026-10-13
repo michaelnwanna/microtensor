@@ -23,6 +23,9 @@ no-heap, no-hidden-cost discipline, applied to inference math.
 - **Integer matmul kernel** — int8 operands, **int32 accumulation**, one final
   dequantize. This is exactly how TFLite-Micro / CMSIS-NN kernels work, distilled
   to its essence.
+- **Heap-free inference runtime** — statically sized dense layers, int8
+  requantization, ReLU, ArgMax, and a two-layer sequential classifier whose
+  dimensions are checked at compile time.
 
 ## Quick look
 
@@ -44,6 +47,71 @@ auto out = mt::quantizedMatmul(qa, pa, qb, pb); // int8 in, float out
 See [`examples/quantized_matmul.cpp`](examples/quantized_matmul.cpp), which
 prints the int8 result alongside the exact float reference and the maximum error.
 
+## From a kernel to a model
+
+[`examples/sensor_classifier.cpp`](examples/sensor_classifier.cpp) connects the
+individual operations into a complete vibration classifier:
+
+```text
+four int8 sensor features
+  |
+  v
+Dense<4, 5> -> ReLU -> Dense<5, 3> -> ArgMax
+           |
+           v
+           normal / imbalance / impact
+```
+
+Every size is part of the C++ type. Connecting a five-element hidden tensor to a
+layer that expects six elements is therefore a compile error, not a runtime
+surprise. Weights and biases live inside the model object, while hidden values
+and scores live inside the returned result. Neither path uses `new`, `malloc`,
+exceptions, RTTI, or a hidden allocator.
+
+### The integer arithmetic
+
+A dense neuron starts with an `int32` bias and accumulates products of `int8`
+values:
+
+```text
+accumulator = bias + sum(input[i] * weight[i])
+```
+
+Why is the accumulator wider? One int8 product can reach `127 * 127 = 16129`;
+adding many of those in another int8 would overflow almost immediately. After
+the dot product, `requantize` converts the accumulator to the next layer's int8
+scale:
+
+```text
+real value = accumulator * inputScale * weightScale
+output int8 = round(real value / outputScale)
+
+multiplier = inputScale * weightScale / outputScale
+output int8 = saturate(round(accumulator * multiplier))
+```
+
+Saturation clamps values to `[-127, 127]` instead of allowing signed overflow.
+The implementation uses a floating-point multiplier to keep this teaching
+version readable. Production integer-only kernels encode the same multiplier as
+a fixed-point integer plus a shift.
+
+### Trace one inference
+
+```bash
+./build/sensor_classifier
+```
+
+The program prints the quantized input, hidden activation after ReLU, final
+class scores, prediction, model size, and activation-storage size. The included
+weights are deliberately small and hand-picked so each neuron can be calculated
+with pencil and paper. A trained deployment would export learned int8 weights
+into the same `DenseLayer` layout.
+
+The example models vibration data because it is representative of embedded edge
+AI: a microcontroller can extract a few bounded signal features, classify the
+machine locally, and transmit an alert without storing raw sensor streams or
+requiring a network connection.
+
 ## Build & test
 
 ```bash
@@ -51,6 +119,7 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/quantized_matmul
+./build/sensor_classifier
 ```
 
 Requires CMake ≥ 3.20 and a C++17 compiler. Tests are dependency-free.
@@ -58,8 +127,8 @@ Requires CMake ≥ 3.20 and a C++17 compiler. Tests are dependency-free.
 ## Roadmap
 
 - Per-axis (per-channel) quantization and asymmetric zero-points.
-- ReLU / requantization fused into the kernel.
-- A minimal sequential model runner (dense → activation → dense).
+- Integer-only fixed-point requantization and fused activation kernels.
+- A compact, versioned model format plus a desktop weight-conversion tool.
 - SIMD (NEON / AVX) and a CMSIS-NN-style path for Cortex-M, so models from this
   core can drop straight onto the `mcu-baremetal` targets.
 

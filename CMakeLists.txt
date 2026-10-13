@@ -35,6 +35,11 @@ add_executable(quantized_matmul examples/quantized_matmul.cpp)
 target_link_libraries(quantized_matmul PRIVATE mt::microtensor)
 mt_set_warnings(quantized_matmul)
 
+# Example: complete int8 sensor-classification pipeline.
+add_executable(sensor_classifier examples/sensor_classifier.cpp)
+target_link_libraries(sensor_classifier PRIVATE mt::microtensor)
+mt_set_warnings(sensor_classifier)
+
 if(MT_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests)
