@@ -23,7 +23,8 @@ struct QuantParams {
 };
 
 /// Pick a symmetric scale so that max|x| maps to 127.
-inline QuantParams chooseSymmetricScale(const float* x, std::size_t n) noexcept {
+inline QuantParams chooseSymmetricScale(const float* x,
+                                        std::size_t n) noexcept {
     float maxabs = 0.0f;
     for (std::size_t i = 0; i < n; ++i) {
         const float a = x[i] < 0.0f ? -x[i] : x[i];

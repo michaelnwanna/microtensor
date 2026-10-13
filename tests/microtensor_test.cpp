@@ -12,26 +12,31 @@ namespace {
 int g_failures = 0;
 int g_checks = 0;
 
-#define CHECK(cond)                                                    \
-    do {                                                               \
-        ++g_checks;                                                    \
-        if (!(cond)) {                                                 \
-            std::printf("FAIL %s:%d: CHECK(%s)\n", __FILE__, __LINE__, \
-                        #cond);                                        \
-            ++g_failures;                                              \
-        }                                                              \
+#define CHECK(cond)                                                            \
+    do {                                                                       \
+        ++g_checks;                                                            \
+        if (!(cond)) {                                                         \
+            std::printf("FAIL %s:%d: CHECK(%s)\n", __FILE__, __LINE__, #cond); \
+            ++g_failures;                                                      \
+        }                                                                      \
     } while (0)
 
-float absf(float x) { return x < 0.0f ? -x : x; }
+float absf(float x) {
+    return x < 0.0f ? -x : x;
+}
 
 void test_matmul_known_values() {
     mt::Matrix<float, 2, 2> a;
-    a(0, 0) = 1.0f; a(0, 1) = 2.0f;
-    a(1, 0) = 3.0f; a(1, 1) = 4.0f;
+    a(0, 0) = 1.0f;
+    a(0, 1) = 2.0f;
+    a(1, 0) = 3.0f;
+    a(1, 1) = 4.0f;
 
     mt::Matrix<float, 2, 2> b;
-    b(0, 0) = 5.0f; b(0, 1) = 6.0f;
-    b(1, 0) = 7.0f; b(1, 1) = 8.0f;
+    b(0, 0) = 5.0f;
+    b(0, 1) = 6.0f;
+    b(1, 0) = 7.0f;
+    b(1, 1) = 8.0f;
 
     const mt::Matrix<float, 2, 2> c = a.matmul(b);
     CHECK(absf(c(0, 0) - 19.0f) < 1e-5f);
@@ -42,8 +47,12 @@ void test_matmul_known_values() {
 
 void test_transpose() {
     mt::Matrix<float, 2, 3> a;
-    a(0, 0) = 1.0f; a(0, 1) = 2.0f; a(0, 2) = 3.0f;
-    a(1, 0) = 4.0f; a(1, 1) = 5.0f; a(1, 2) = 6.0f;
+    a(0, 0) = 1.0f;
+    a(0, 1) = 2.0f;
+    a(0, 2) = 3.0f;
+    a(1, 0) = 4.0f;
+    a(1, 1) = 5.0f;
+    a(1, 2) = 6.0f;
 
     const mt::Matrix<float, 3, 2> t = a.transpose();
     CHECK(absf(t(0, 0) - 1.0f) < 1e-5f);
@@ -64,13 +73,20 @@ void test_quantize_roundtrip() {
 
 void test_quantized_matmul_matches_float() {
     mt::Matrix<float, 2, 3> a;
-    a(0, 0) = 0.5f;  a(0, 1) = -0.25f; a(0, 2) = 1.0f;
-    a(1, 0) = -0.75f; a(1, 1) = 0.1f;  a(1, 2) = 0.4f;
+    a(0, 0) = 0.5f;
+    a(0, 1) = -0.25f;
+    a(0, 2) = 1.0f;
+    a(1, 0) = -0.75f;
+    a(1, 1) = 0.1f;
+    a(1, 2) = 0.4f;
 
     mt::Matrix<float, 3, 2> b;
-    b(0, 0) = 1.0f;  b(0, 1) = 0.2f;
-    b(1, 0) = -0.5f; b(1, 1) = 0.8f;
-    b(2, 0) = 0.3f;  b(2, 1) = -1.0f;
+    b(0, 0) = 1.0f;
+    b(0, 1) = 0.2f;
+    b(1, 0) = -0.5f;
+    b(1, 1) = 0.8f;
+    b(2, 0) = 0.3f;
+    b(2, 1) = -1.0f;
 
     const mt::Matrix<float, 2, 2> ref = a.matmul(b);
 
